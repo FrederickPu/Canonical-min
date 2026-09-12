@@ -1,6 +1,6 @@
 name = "Canonical-min"
 version = "0.1.0"
-defaultTargets = ["CanonicalMin"]
+defaultTargets = ["CanonicalMin", "canonical-min-arena"]
 testDriver = "Test"
 
 [[lean_lib]]
@@ -9,6 +9,15 @@ name = "CanonicalMin"
 [[require]]
 name = "Canonical"
 scope = "chasenorman"
+
+[[require]]
+name = "lean4export"
+scope = "leanprover"
+rev = "f297dfe2a8557e8674fe892bb49dffe4bfadc0e9"
+
+[[lean_exe]]
+name = "canonical-min-arena"
+root = "ArenaMain"
 
 [[lean_lib]]
 name = "Test"
