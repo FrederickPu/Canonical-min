@@ -1,4 +1,4 @@
-import CanonicalMin.Checker
+import CanonicalMin.Monad
 open Array Ord Constraint TypeMVar
 
 structure CanonicalState where
@@ -66,12 +66,12 @@ def MVar.domain (m : MVar) (pos : Nat) :
       if pos + headType.inputs.size > (← capacity) then continue
       let args := headType.inputs.zipIdx.map fun (input, k) => {
         id := pos + k, lctx := if (inputs input).isEmpty then m.lctx else input :: m.lctx,
-        preferredNames := input.preferredNames
+        preferredNames := input.output.preferredNames
       }
       let assn : Assignment := { debruijn, index, args }
       m.assign assn
       if let some constraints ← run
-        ((← get).constraints[m.id]!.flatMapM continuation)
+        ((← get).constraints[m.id]!.flatMapM (continuation · assn))
         then result := result.push (assn, constraints)
   return result
 
@@ -110,8 +110,10 @@ partial def next (m : MVar) : CanonicalM Next := do
       let (snd, e2) ← next s
       pure (if compare fst snd == .gt then fst else snd, e1 * e2)
   else
-    let rigid ← run ((← get).constraints[m.id]!.anyM rigid)
-    return (some (m, rigid.get!), if rigid.get! then 1 else 5)
+    let dummy := { debruijn := m.lctx.length, index := 0, args := #[] }
+    let rigid ← run ((← get).constraints[m.id]!.forM fun x =>
+      do let _ ← continuation x dummy)
+    return (some (m, rigid.isNone), if rigid.isNone then 1 else 5)
 
 variable [Monad m] (root : MVar) (cb step : m Unit) in
 /--
@@ -164,7 +166,7 @@ def iddfs [Monad m] [MonadLiftT CanonicalM m]
   let start ← capacity
   let mut entropy := 1000
   while true do
-    extend 4
+    extend 5
     dfs root cb step entropy start
     entropy := entropy * 3
 

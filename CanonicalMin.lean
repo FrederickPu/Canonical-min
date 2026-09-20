@@ -1,4 +1,5 @@
 import Canonical
+import CanonicalMin.Checker
 import CanonicalMin.Search
 open Lean Parser Meta Elab Tactic
 
@@ -31,7 +32,7 @@ partial def Canonical.Typ.toType (ty : Canonical.Typ) (ctx : List (Array String)
       paramTypes := #[],
       letTypes := #[]
     }).toType (if preferredNames.isEmpty then ctx else preferredNames :: ctx),
-    output := ← ty.toTerm.toTerm ctx, preferredNames
+    output := ← ty.toTerm.toTerm ctx
   }
 
 def disambiguate (str : String) (set : Std.HashSet String) : String := Id.run do
@@ -65,8 +66,8 @@ partial def MVar.toString (s : MVar) : CanonicalM String := do
   match (← get).assignments[s.id]! with
   | none => pure "_"
   | some assn =>
-    let name := (s.lctx[assn.debruijn]?.bind (·.preferredNames[assn.index]?)).getD "?"
-    let params := (s.lctx[0]?.map (·.preferredNames)).getD #[]
+    let name := (s.lctx[assn.debruijn]?.bind (·.output.preferredNames[assn.index]?)).getD "?"
+    let params := (s.lctx[0]?.map (·.output.preferredNames)).getD #[]
     let args := (← assn.args.mapM (·.toString))
     if params.isEmpty && args.isEmpty then return name
     let params := params.foldl (fun x y => s!"{x} {y}") ""
@@ -81,17 +82,28 @@ def removeTypeInType (typ : Canonical.Typ) : Canonical.Typ :=
       letTypes := (typ.letTypes.set! idx uType).push uType }
   else typ
 
+def startES : CanonicalM (List Block) := do
+  let size := (← get).constraints.size
+  modify fun x => { x with
+    constraints := x.constraints.push #[]
+    assignments := x.assignments.push none
+  }
+  let mvar := { id := size, lctx := [], preferredNames := #[] }
+  let dummy := .vars 0 (some ⟨#[{ inputs := #[], output := mvar }], []⟩)
+  return [dummy]
+
 def inhabit (typ : Canonical.Typ) (timeout : Nat) (count : Nat) : DfsM Canonical.CanonicalResult := do
   let result : IO.Ref (Array Canonical.Term) ← IO.mkRef #[]
   let tmvar ← typ.toType
-  let typ := Typ.mk tmvar []
-  let mvar := MVar.mk (← capacity) [tmvar] tmvar.preferredNames
-  let tm := Term.mk mvar []
+  let es ← startES
+  let typ := Typ.mk tmvar es
+  let mvar := MVar.mk (← capacity) [tmvar] tmvar.output.preferredNames
+  let tm := Term.mk mvar es
   extend 1
   let time ← IO.monoMsNow
   let steps ← IO.mkRef 0
 
-  process (·.push ·) (← run (do constraint (check tm typ) 0)).get!
+  process (·.push ·) (← run (check tm typ ⟨1, #[]⟩)).get!.2.2
   try
     iddfs mvar (do
       result.modify (·.push { (← mvar.toTerm) with params := #[] })
@@ -119,7 +131,12 @@ def preprocessIntros (goal : MVarId) (reconstruct : Expr → MetaM Expr) : MetaM
 elab (name := canonicalSeq) "canonical_min" timeout_syntax:(num)? config:optConfig premises_syntax:(Canonical.premises)? : tactic => unsafe do
   let config ← Canonical.canonicalConfig config
   let goal ← getMainGoal
-  let (premises, structs) ← Canonical.getPremises goal premises_syntax config
+  let consts ← if let some consts := premises_syntax then
+    match consts with
+    | `(Canonical.premises| [$args,*]) => args.getElems.raw.mapM resolveGlobalConstNoOverload
+    | _ => Elab.throwUnsupportedSyntax
+    else pure #[]
+  let (premises, structs) ← Canonical.getPremises goal consts config
 
   let (goal', reconstruct) ← Canonical.preprocess goal config structs
   let (goal', reconstruct) ← preprocessIntros goal' reconstruct
@@ -134,7 +151,7 @@ elab (name := canonicalSeq) "canonical_min" timeout_syntax:(num)? config:optConf
     return
 
   let timeout := if let some timeout := timeout_syntax then timeout.getNat else 5
-  let (result, _) ← inhabit typ timeout config.count.toNat {}
+  let (result, _) ← inhabit typ timeout config.count {}
 
   let proofs ← Canonical.postprocess result goal' config reconstruct
   Canonical.present proofs goal premises_syntax timeout_syntax

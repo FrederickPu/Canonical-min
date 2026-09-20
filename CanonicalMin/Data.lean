@@ -9,7 +9,7 @@ mutual
   structure MVar where
     id: Nat
     lctx: List TypeMVar
-    preferredNames : Array String
+    preferredNames: Array String
   deriving Inhabited
 
   /--
@@ -23,7 +23,6 @@ mutual
   structure TypeMVar where
     inputs: Array TypeMVar
     output: MVar
-    preferredNames: Array String
   deriving Inhabited
 end
 

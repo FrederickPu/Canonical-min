@@ -14,32 +14,16 @@ Otherwise, if the block consists of terms, we must β-reduce. We access the
 term at index `assn.index` and apply it to assn.args under the extended ES.
 Note that apply does not create new metavariables or assignments.
 -/
-partial def Term.apply (t : Term) (args : Block)
-  (rigid : ConstraintM Bool := pure false) : SearchM WHNF := do
+partial def Term.apply (t : Term) (args : Block) : SearchM WHNF := do
   let es := if t.mvar.preferredNames.isEmpty then t.es else args :: t.es
-  let assn ← t.mvar.assignment rigid
+  let assn ← t.mvar.assignment
   let args : Terms := { mvars := assn.args, es }
   match es[assn.debruijn]! with
   | .vars blockId types => pure {
       head := { blockId, index := assn.index },
       type := types >>= (·[assn.index]!), args
     }
-  | .terms ts => ts[assn.index]!.apply args rigid
-
-/--
-To determine whether m has a rigid constraint, we invoke the `rigid` predicate
-for each of its stuck constraints. The `rigid` predicate was passed into the `apply`
-function by the type checker, and was added to the constraint by `assignment`.
-To facilitate this, we have the following templates for the predicate:
--/
-def rigid : ConstraintM Bool := return true
-/--
-Here, `rigid` indicates that the constraint is unconditionally rigid, and `other`
-indicates that the constraint is rigid when `t` applied with `args` does not get
-stuck on a metavariable.
--/
-def other (t : Term) (args : Block) : ConstraintM Bool :=
-  return (← constraint (do t.apply args rigid) 0).isEmpty
+  | .terms ts => ts[assn.index]!.apply args
 
 mutual
   /--
@@ -68,7 +52,7 @@ mutual
   -/
   partial def Term.eq (t1 t2 : Term) : Judgment := judgment do
     let vars ← fresh
-    (← t1.apply vars (other t2 vars)).eq (← t2.apply vars rigid)
+    (← t1.apply vars).eq (← t2.apply vars)
 
   /--
   To determine whether two WHNF expressions are equal, we compare their
@@ -126,5 +110,4 @@ partial def check (t : Term) (ty : Typ) : Judgment := judgment do
   let inputs := headType.get!.inputs args
   for i in [0:args.size] do
     check args[i]! inputs[i]!
-  (← headType.get!.output.apply args (other ty.output vars)).eq
-    (← ty.output.apply vars rigid)
+  (← headType.get!.output.apply args).eq (← ty.output.apply vars)

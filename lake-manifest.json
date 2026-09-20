@@ -1,15 +1,16 @@
-{"version": "1.1.0",
+{"version": "1.2.0",
  "packagesDir": ".lake/packages",
  "packages":
  [{"url": "https://github.com/chasenorman/CanonicalLean",
    "type": "git",
    "subDir": null,
    "scope": "chasenorman",
-   "rev": "20b3bcaeb11e9a1bc42fd462df1354174d96959a",
+   "rev": "336841e4ef592ae3f669d79de91a4b91dbdbe38c",
    "name": "Canonical",
    "manifestFile": "lake-manifest.json",
    "inputRev": "master",
    "inherited": false,
    "configFile": "lakefile.lean"}],
  "name": "«Canonical-min»",
- "lakeDir": ".lake"}
+ "lakeDir": ".lake",
+ "fixedToolchain": false}

@@ -36,9 +36,9 @@ been violated, or otherwise returns an array of `Constraint` with any remaining
 work to be done.
 -/
 structure Constraint where
-  continuation: Array (Option Assignment) → Option (Array Constraint)
+  continuation: Assignment → Array (Option Assignment)
+                           → Option (Array Constraint)
   stuck: MVar
-  rigid: ConstraintM Bool
 
 /--
 Next, we define the `JudgmentM` monad, and `Judgment` type for `Term.eq`, `WHNF.eq`,
@@ -96,15 +96,6 @@ Our intention is to use this continuation monad for `MVar.assignment`.
 abbrev SearchM := ContT JudgmentM Unit
 
 /--
-The constraint function converts a `SearchM T` into a `ConstraintM (Array`
-`Constraint)` by passing an empty continuation, a designated `start` value for
-the state `Nat`, and returning only the accumulated array of `Constraint`.
--/
-def constraint (t : SearchM T)
-  (start : Nat) : ConstraintM (Array Constraint) := do
-  return (← t (fun _ s => pure ((), s)) (start, #[])).2.2
-
-/--
 Recall that the `MVar.assignment` function is supposed to access the
 assignment of a metavariable. If the metavariable is assigned, we will directly invoke
 the callback with the assignment, continuing normal execution. Otherwise, we
@@ -116,12 +107,10 @@ With this implementation, if `Term.apply` is called on a term with an unassigned
 mvar, the computation is paused and is stored in the form of a constraint on
 that metavariable.
 -/
-partial def MVar.assignment (m : MVar)
-  (rigid : ConstraintM Bool) : SearchM Assignment := do
+partial def MVar.assignment (m : MVar) : SearchM Assignment := do
   (← read)[m.id]!.getDM fun k (n, l) => return ((), n, l.push {
-    continuation := constraint (do k (← m.assignment rigid)) n,
-    stuck := m,
-    rigid
+    continuation := fun read assn => do (← k read (n, #[]) assn).2.2,
+    stuck := m
   })
 
 /--
